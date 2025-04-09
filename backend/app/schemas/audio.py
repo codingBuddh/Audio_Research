@@ -2,11 +2,12 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any
 from enum import Enum
 
-class AudioFeatureType(str, Enum):
+class AudioFeatureType(Enum):
     ACOUSTIC = "acoustic"
     SPEAKER = "speaker"
     PARALINGUISTIC = "paralinguistic"
     COGNITIVE = "cognitive"
+    TRANSCRIPTION = "transcription"
 
 class ChunkStatus(str, Enum):
     PROCESSING = "PROCESSING"

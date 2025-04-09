@@ -6,11 +6,17 @@ from pydub import AudioSegment
 import os
 from ...schemas.audio import AudioFeatureType, AudioFeatures
 import logging
+import whisper
+import torch
+from pathlib import Path
 
 class AudioProcessor:
     def __init__(self, sample_rate: int = 22050):
         self.sample_rate = sample_rate
         self.logger = logging.getLogger(__name__)
+        # Initialize Whisper model
+        self.whisper_model = whisper.load_model("tiny.en")
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def load_audio_chunk(self, file_path: str, start_time: float, end_time: float) -> np.ndarray:
         """Load a specific chunk of audio file"""
@@ -125,4 +131,47 @@ class AudioProcessor:
         onset_frames = librosa.onset.onset_detect(y=y, sr=self.sample_rate)
         if len(onset_frames) > 0:
             return float(onset_frames[0] * 512 / self.sample_rate)  # Convert frames to seconds
-        return 0.0 
+        return 0.0
+
+    def process_chunk(self, audio_path: str, start_time: float, end_time: float, feature_types: List[AudioFeatureType]) -> Dict[str, Any]:
+        """Process a chunk of audio and extract requested features"""
+        try:
+            # Load the audio chunk
+            y, sr = librosa.load(audio_path, offset=start_time, duration=end_time-start_time)
+            
+            features = {}
+            
+            # Transcribe audio chunk if needed
+            if AudioFeatureType.TRANSCRIPTION in feature_types:
+                # Save temporary chunk for Whisper
+                temp_chunk_path = f"temp_chunk_{start_time}_{end_time}.wav"
+                librosa.output.write_wav(temp_chunk_path, y, sr)
+                
+                try:
+                    # Transcribe with Whisper
+                    result = self.whisper_model.transcribe(temp_chunk_path)
+                    features['transcription'] = result["text"].strip()
+                finally:
+                    # Clean up temporary file
+                    Path(temp_chunk_path).unlink(missing_ok=True)
+            
+            # Process acoustic features if needed
+            if AudioFeatureType.ACOUSTIC in feature_types:
+                features['acoustic'] = self._extract_acoustic_features(y, sr)
+            
+            # Process paralinguistic features if needed
+            if AudioFeatureType.PARALINGUISTIC in feature_types:
+                features['paralinguistic'] = self._extract_paralinguistic_features(y, sr)
+            
+            return features
+            
+        except Exception as e:
+            raise Exception(f"Error processing chunk: {str(e)}")
+
+    def _extract_acoustic_features(self, y: np.ndarray, sr: int) -> Dict[str, Any]:
+        """Extract acoustic features from audio chunk"""
+        # ... existing acoustic feature extraction code ...
+
+    def _extract_paralinguistic_features(self, y: np.ndarray, sr: int) -> Dict[str, Any]:
+        """Extract paralinguistic features from audio chunk"""
+        # ... existing paralinguistic feature extraction code ... 

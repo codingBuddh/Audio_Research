@@ -11,35 +11,46 @@ import {
   Flex,
 } from '@chakra-ui/react';
 import { AudioFeatureType } from '../types';
-import { MdAudiotrack, MdSentimentSatisfiedAlt } from 'react-icons/md';
+import { MdAudiotrack, MdSentimentSatisfiedAlt, MdTranscribe, MdGraphicEq } from 'react-icons/md';
 
-const FEATURE_OPTIONS = [
+export const FEATURE_OPTIONS = [
+  {
+    type: AudioFeatureType.TRANSCRIPTION,
+    label: 'Transcription',
+    icon: MdTranscribe,
+    description: 'Convert speech to text using Whisper AI',
+    features: [
+      'High-accuracy speech recognition',
+      'Support for multiple languages',
+      'Punctuation and formatting',
+    ],
+  },
   {
     type: AudioFeatureType.ACOUSTIC,
-    label: "Acoustic Features",
-    description: "Extract fundamental acoustic properties including MFCCs, pitch, formants, and spectral features",
-    icon: MdAudiotrack,
+    label: 'Acoustic Features',
+    icon: MdGraphicEq,
+    description: 'Extract fundamental acoustic properties including MFCCs, pitch, formants, and spectral features',
     features: [
-      "Mel-frequency cepstral coefficients (MFCCs)",
-      "Fundamental frequency (pitch)",
-      "Formant frequencies",
-      "Energy and zero-crossing rate",
-      "Spectral characteristics"
-    ]
+      'Mel-frequency cepstral coefficients (MFCCs)',
+      'Fundamental frequency (pitch)',
+      'Formant frequencies',
+      'Energy and zero-crossing rate',
+      'Spectral characteristics',
+    ],
   },
   {
     type: AudioFeatureType.PARALINGUISTIC,
-    label: "Paralinguistic Features",
-    description: "Analyze voice quality and emotional characteristics of speech",
+    label: 'Paralinguistic Features',
     icon: MdSentimentSatisfiedAlt,
+    description: 'Analyze voice quality and emotional characteristics of speech',
     features: [
-      "Pitch variability",
-      "Speech rate analysis",
-      "Voice quality (jitter/shimmer)",
-      "Harmonics-to-noise ratio",
-      "Emotional markers"
-    ]
-  }
+      'Pitch variability',
+      'Speech rate analysis',
+      'Voice quality (jitter/shimmer)',
+      'Harmonics-to-noise ratio',
+      'Emotional markers',
+    ],
+  },
 ];
 
 interface FeatureSelectorProps {
@@ -107,7 +118,7 @@ export const FeatureSelector: React.FC<FeatureSelectorProps> = ({
               <VStack align="start" spacing={1}>
                 {feature.features.map((item, index) => (
                   <Text
-                    key={index}
+                    key={`${feature.type}-${index}`}
                     fontSize="xs"
                     color={useColorModeValue('gray.600', 'gray.400')}
                     pl={4}

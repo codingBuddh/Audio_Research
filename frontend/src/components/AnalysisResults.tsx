@@ -146,6 +146,24 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
             <AccordionPanel pb={4}>
               {chunk.status === ChunkStatus.COMPLETED && (
                 <VStack spacing={6} align="stretch">
+                  {/* Transcription */}
+                  {chunk.features?.transcription && (
+                    <Box>
+                      <Heading size="sm" mb={3}>Transcription</Heading>
+                      <Box 
+                        p={4}
+                        bg={useColorModeValue('gray.50', 'gray.900')}
+                        borderRadius="md"
+                        borderWidth="1px"
+                        borderColor={useColorModeValue('gray.200', 'gray.700')}
+                      >
+                        <Text fontSize="md" color={useColorModeValue('gray.800', 'gray.200')}>
+                          {chunk.features.transcription}
+                        </Text>
+                      </Box>
+                    </Box>
+                  )}
+
                   {/* Acoustic Features */}
                   {chunk.features?.acoustic && (
                     <Box>
