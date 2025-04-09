@@ -1,134 +1,265 @@
+import React from 'react';
 import {
+  Box,
   VStack,
   Heading,
   Text,
-  Box,
-  Badge,
+  Progress,
+  Accordion,
+  AccordionItem,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon,
   SimpleGrid,
-} from '@chakra-ui/react'
-import { Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/accordion'
-import { AudioAnalysisResponse, ChunkStatus } from '../types'
+  Badge,
+  Stat,
+  StatLabel,
+  StatNumber,
+  StatHelpText,
+  useColorModeValue,
+} from '@chakra-ui/react';
+import { ChunkStatus } from '../types';
 
 interface AnalysisResultsProps {
-  results: AudioAnalysisResponse
+  results: any;
 }
 
+const formatValue = (value: number, precision: number = 2, unit: string = ''): string => {
+  return `${value.toFixed(precision)}${unit ? ' ' + unit : ''}`;
+};
+
+interface StatCardProps {
+  label: string;
+  value: number;
+  helpText?: string;
+  format?: (value: number) => string;
+}
+
+const StatCard = ({ label, value, helpText, format = (v: number) => formatValue(v) }: StatCardProps) => (
+  <Stat
+    px={4}
+    py={2}
+    shadow="sm"
+    border="1px solid"
+    borderColor={useColorModeValue('gray.200', 'gray.700')}
+    borderRadius="lg"
+    backgroundColor={useColorModeValue('white', 'gray.800')}
+  >
+    <StatLabel color="gray.500" fontSize="sm">{label}</StatLabel>
+    <StatNumber fontSize="lg">{format(value)}</StatNumber>
+    {helpText && <StatHelpText fontSize="xs">{helpText}</StatHelpText>}
+  </Stat>
+);
+
 export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
   const getStatusColor = (status: ChunkStatus) => {
     switch (status) {
       case ChunkStatus.COMPLETED:
-        return 'green'
+        return 'blackAlpha';
       case ChunkStatus.PROCESSING:
-        return 'blue'
+        return 'gray';
       case ChunkStatus.FAILED:
-        return 'red'
+        return 'blackAlpha';
       default:
-        return 'gray'
+        return 'gray';
     }
-  }
+  };
 
-  const formatTime = (time: number) => {
-    const minutes = Math.floor(time / 60)
-    const seconds = Math.floor(time % 60)
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`
-  }
+  const getStatusBadgeProps = (status: ChunkStatus) => {
+    switch (status) {
+      case ChunkStatus.COMPLETED:
+        return {
+          colorScheme: 'green',
+          variant: 'solid',
+          children: 'Completed'
+        };
+      case ChunkStatus.PROCESSING:
+        return {
+          colorScheme: 'gray',
+          variant: 'subtle',
+          children: 'Processing'
+        };
+      case ChunkStatus.FAILED:
+        return {
+          colorScheme: 'red',
+          variant: 'subtle',
+          children: 'Failed'
+        };
+      default:
+        return {
+          colorScheme: 'gray',
+          variant: 'subtle',
+          children: 'Pending'
+        };
+    }
+  };
+
+  const progress = results.chunks.filter(
+    (chunk: any) => chunk.status === ChunkStatus.COMPLETED
+  ).length / results.total_chunks * 100;
 
   return (
-    <Box>
-      <Heading size="md" mb={4}>Analysis Results</Heading>
-      
+    <VStack spacing={6} align="stretch" w="100%">
+      <Box>
+        <Heading size="md" mb={2}>Analysis Progress</Heading>
+        <Progress
+          value={progress}
+          size="lg"
+          colorScheme="blackAlpha"
+          borderRadius="md"
+          hasStripe
+          isAnimated={progress < 100}
+        />
+        <Text mt={2} fontSize="sm" color="gray.500">
+          {Math.round(progress)}% Complete ({results.chunks.filter((c: any) => c.status === ChunkStatus.COMPLETED).length} of {results.total_chunks} chunks)
+        </Text>
+      </Box>
+
       <Accordion allowMultiple>
-        {results.chunks.map((chunk) => (
-          <AccordionItem key={chunk.chunk_id} value={chunk.chunk_id.toString()}>
-            <h2>
-              <AccordionButton>
-                <Box flex="1" textAlign="left">
-                  <Text fontWeight="medium">
-                    Chunk {chunk.chunk_id + 1} ({formatTime(chunk.start_time)} - {formatTime(chunk.end_time)})
-                  </Text>
-                </Box>
-                <Badge colorScheme={getStatusColor(chunk.status)} mr={2}>
-                  {chunk.status}
-                </Badge>
-                <AccordionIcon />
-              </AccordionButton>
-            </h2>
-            
+        {results.chunks.map((chunk: any) => (
+          <AccordionItem
+            key={chunk.chunk_id}
+            border="1px solid"
+            borderColor={borderColor}
+            borderRadius="md"
+            mb={2}
+          >
+            <AccordionButton py={3}>
+              <Box flex="1" textAlign="left">
+                <Text fontWeight="medium">
+                  Chunk {chunk.chunk_id + 1}
+                  <Badge
+                    ml={2}
+                    {...getStatusBadgeProps(chunk.status)}
+                  >
+                    {chunk.status}
+                  </Badge>
+                </Text>
+                <Text fontSize="sm" color="gray.500">
+                  {formatValue(chunk.start_time, 1)}s - {formatValue(chunk.end_time, 1)}s
+                </Text>
+              </Box>
+              <AccordionIcon />
+            </AccordionButton>
+
             <AccordionPanel pb={4}>
-              {chunk.status === ChunkStatus.COMPLETED && chunk.features?.acoustic ? (
-                <SimpleGrid columns={[1, 2]} spacing={4}>
-                  {/* MFCCs */}
-                  <Box mb={3}>
-                    <Text fontWeight="bold">MFCCs:</Text>
-                    <Text fontSize="sm" color="gray.600">
-                      {chunk.features.acoustic.mfcc.map((v: number) => v.toFixed(2)).join(', ')}
-                    </Text>
-                  </Box>
-                  
-                  {/* Pitch */}
-                  <Box mb={3}>
-                    <Text fontWeight="bold">Pitch:</Text>
-                    <Text fontSize="sm" color="gray.600">
-                      {chunk.features.acoustic.pitch.toFixed(2)} Hz
-                    </Text>
-                  </Box>
-                  
-                  {/* Formants */}
-                  <Box mb={3}>
-                    <Text fontWeight="bold">Formants:</Text>
-                    <Text fontSize="sm" color="gray.600">
-                      {chunk.features.acoustic.formants.map((f: number, i: number) => 
-                        `F${i+1}: ${f.toFixed(2)} Hz`
-                      ).join(', ')}
-                    </Text>
-                  </Box>
-                  
-                  {/* Energy */}
-                  <Box mb={3}>
-                    <Text fontWeight="bold">Energy:</Text>
-                    <Text fontSize="sm" color="gray.600">
-                      {chunk.features.acoustic.energy.toFixed(4)}
-                    </Text>
-                  </Box>
-                  
-                  {/* Zero-Crossing Rate */}
-                  <Box mb={3}>
-                    <Text fontWeight="bold">Zero-Crossing Rate:</Text>
-                    <Text fontSize="sm" color="gray.600">
-                      {chunk.features.acoustic.zcr.toFixed(4)}
-                    </Text>
-                  </Box>
-                  
-                  {/* Spectral Features */}
-                  <Box mb={3}>
-                    <Text fontWeight="bold">Spectral Features:</Text>
-                    <Text fontSize="sm" color="gray.600">
-                      Centroid: {chunk.features.acoustic.spectral.centroid.toFixed(2)} Hz<br />
-                      Bandwidth: {chunk.features.acoustic.spectral.bandwidth.toFixed(2)} Hz<br />
-                      Flux: {chunk.features.acoustic.spectral.flux.toFixed(4)}<br />
-                      Roll-off: {chunk.features.acoustic.spectral.rolloff.toFixed(2)} Hz
-                    </Text>
-                  </Box>
-                  
-                  {/* Voice Onset Time */}
-                  {chunk.features.acoustic.vot !== null && (
-                    <Box mb={3}>
-                      <Text fontWeight="bold">Voice Onset Time:</Text>
-                      <Text fontSize="sm" color="gray.600">
-                        {chunk.features.acoustic.vot.toFixed(4)} seconds
-                      </Text>
+              {chunk.status === ChunkStatus.COMPLETED && (
+                <VStack spacing={6} align="stretch">
+                  {/* Acoustic Features */}
+                  {chunk.features?.acoustic && (
+                    <Box>
+                      <Heading size="sm" mb={4}>Acoustic Features</Heading>
+                      
+                      <SimpleGrid columns={[1, 2, 3]} spacing={4} mb={4}>
+                        <StatCard
+                          label="Pitch"
+                          value={chunk.features.acoustic.pitch}
+                          helpText="Fundamental frequency"
+                          format={(v) => formatValue(v, 1, 'Hz')}
+                        />
+                        <StatCard
+                          label="Energy"
+                          value={chunk.features.acoustic.energy}
+                          helpText="Root mean square energy"
+                          format={(v) => formatValue(v, 4)}
+                        />
+                        <StatCard
+                          label="Zero-Crossing Rate"
+                          value={chunk.features.acoustic.zcr}
+                          helpText="Signal polarity changes"
+                          format={(v) => formatValue(v, 4)}
+                        />
+                      </SimpleGrid>
+
+                      <Box mb={4}>
+                        <Text fontWeight="medium" mb={2}>Spectral Features</Text>
+                        <SimpleGrid columns={[1, 2]} spacing={4}>
+                          <StatCard
+                            label="Spectral Centroid"
+                            value={chunk.features.acoustic.spectral.centroid}
+                            helpText="Brightness of sound"
+                            format={(v) => formatValue(v, 1, 'Hz')}
+                          />
+                          <StatCard
+                            label="Spectral Bandwidth"
+                            value={chunk.features.acoustic.spectral.bandwidth}
+                            helpText="Width of the spectrum"
+                            format={(v) => formatValue(v, 1, 'Hz')}
+                          />
+                          <StatCard
+                            label="Spectral Rolloff"
+                            value={chunk.features.acoustic.spectral.rolloff}
+                            helpText="Frequency below which 85% of energy is concentrated"
+                            format={(v) => formatValue(v, 1, 'Hz')}
+                          />
+                          <StatCard
+                            label="Spectral Flux"
+                            value={chunk.features.acoustic.spectral.flux}
+                            helpText="Rate of spectral change"
+                            format={(v) => formatValue(v, 4)}
+                          />
+                        </SimpleGrid>
+                      </Box>
+
+                      <Box>
+                        <Text fontWeight="medium" mb={2}>MFCCs</Text>
+                        <Text fontSize="sm" color="gray.600">
+                          {chunk.features.acoustic.mfcc.map((v: number) => formatValue(v, 2)).join(', ')}
+                        </Text>
+                      </Box>
                     </Box>
                   )}
-                </SimpleGrid>
-              ) : chunk.status === ChunkStatus.FAILED ? (
+
+                  {/* Paralinguistic Features */}
+                  {chunk.features?.paralinguistic && (
+                    <Box>
+                      <Heading size="sm" mb={4}>Paralinguistic Features</Heading>
+                      
+                      <SimpleGrid columns={[1, 2, 3]} spacing={4}>
+                        <StatCard
+                          label="Pitch Variability"
+                          value={chunk.features.paralinguistic.pitch_variability}
+                          helpText="Variation in fundamental frequency"
+                          format={(v) => formatValue(v, 1, 'Hz')}
+                        />
+                        <StatCard
+                          label="Speech Rate"
+                          value={chunk.features.paralinguistic.speech_rate}
+                          helpText="Syllables per second"
+                          format={(v) => formatValue(v, 2, 'syl/s')}
+                        />
+                        <StatCard
+                          label="Harmonics-to-Noise"
+                          value={chunk.features.paralinguistic.hnr}
+                          helpText="Voice quality measure"
+                          format={(v) => formatValue(v, 1, 'dB')}
+                        />
+                        <StatCard
+                          label="Jitter"
+                          value={chunk.features.paralinguistic.jitter}
+                          helpText="Frequency variation"
+                          format={(v) => formatValue(v, 2, '%')}
+                        />
+                        <StatCard
+                          label="Shimmer"
+                          value={chunk.features.paralinguistic.shimmer}
+                          helpText="Amplitude variation"
+                          format={(v) => formatValue(v, 2, '%')}
+                        />
+                      </SimpleGrid>
+                    </Box>
+                  )}
+                </VStack>
+              )}
+              
+              {chunk.status === ChunkStatus.FAILED && (
                 <Text color="red.500">{chunk.error}</Text>
-              ) : (
-                <Text color="gray.500">Processing...</Text>
               )}
             </AccordionPanel>
           </AccordionItem>
         ))}
       </Accordion>
-    </Box>
-  )
-}
+    </VStack>
+  );
+};

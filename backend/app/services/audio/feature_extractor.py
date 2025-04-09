@@ -1,8 +1,11 @@
 import librosa
 import numpy as np
-from typing import Dict, List, Any, Optional
+from scipy.io import wavfile
+from scipy.signal import find_peaks
+from scipy.fft import rfft, rfftfreq
 import logging
-from ...schemas.audio import AudioFeatureType, AcousticFeatures, SpectralFeatures
+from typing import Dict, List, Any, Optional, Tuple
+from ...schemas.audio import AudioFeatureType, AcousticFeatures, SpectralFeatures, ParalinguisticFeatures
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +20,17 @@ class FeatureExtractor:
         try:
             for feature_type in feature_types:
                 if feature_type == AudioFeatureType.ACOUSTIC:
-                    features["acoustic"] = self._extract_acoustic_features(audio_chunk)
-                elif feature_type == "pitch":
-                    features["pitch"] = self._extract_pitch(audio_chunk)
-                elif feature_type == "emotion_scores":
-                    features["emotion_scores"] = self._extract_emotion_scores(audio_chunk)
-                elif feature_type == "speaking_rate":
-                    features["speaking_rate"] = self._extract_speaking_rate(audio_chunk)
+                    acoustic_features = self._extract_acoustic_features(audio_chunk)
+                    features["acoustic"] = acoustic_features.model_dump()
+                elif feature_type == AudioFeatureType.PARALINGUISTIC:
+                    paralinguistic_features = self._extract_paralinguistic_features(audio_chunk)
+                    features["paralinguistic"] = paralinguistic_features.model_dump()
+                elif feature_type == AudioFeatureType.SPEAKER:
+                    # Not implemented yet
+                    pass
+                elif feature_type == AudioFeatureType.COGNITIVE:
+                    # Not implemented yet
+                    pass
         except Exception as e:
             logger.error(f"Error extracting features: {str(e)}")
             raise
@@ -31,68 +38,145 @@ class FeatureExtractor:
         return features
 
     def _extract_acoustic_features(self, audio_chunk: np.ndarray) -> AcousticFeatures:
-        """Extract all acoustic features (Low-Level Descriptors)"""
-        
-        # 1. MFCCs
-        mfccs = librosa.feature.mfcc(y=audio_chunk, sr=self.sample_rate, n_mfcc=13)
-        mfcc_means = mfccs.mean(axis=1).tolist()
+        """Extract acoustic features using optimized computations"""
+        try:
+            # 1. Compute FFT for frequency-domain features
+            N = len(audio_chunk)
+            yf = rfft(audio_chunk)
+            xf = rfftfreq(N, 1 / self.sample_rate)
+            spectrum = np.abs(yf)
+            
+            # 2. MFCCs (using librosa for this as it's optimized)
+            mfccs = librosa.feature.mfcc(y=audio_chunk, sr=self.sample_rate, n_mfcc=13)
+            mfcc_means = mfccs.mean(axis=1).tolist()
 
-        # 2. Pitch (Fundamental Frequency)
-        pitches, magnitudes = librosa.piptrack(y=audio_chunk, sr=self.sample_rate)
-        pitch = float(pitches[magnitudes > 0.5].mean()) if len(pitches[magnitudes > 0.5]) > 0 else 0.0
+            # 3. Pitch using peak detection in frequency domain
+            peaks, _ = find_peaks(spectrum, height=np.max(spectrum) * 0.1)
+            pitch = float(xf[peaks[0]]) if len(peaks) > 0 else 0.0
 
-        # 3. Formants (using linear prediction coefficients as proxy)
-        lpc_coeffs = librosa.lpc(audio_chunk, order=8)
-        formants = np.abs(np.roots(lpc_coeffs))
-        formant_freqs = sorted([float(f * self.sample_rate / (2 * np.pi)) for f in formants if f < 1])[:3]
-        
-        # 4. Energy
-        energy = float(np.sqrt(np.mean(audio_chunk**2)))
+            # 4. Formants using peak detection in specific frequency ranges
+            formant_ranges = [(300, 1000), (850, 2500), (1950, 3000)]  # F1, F2, F3 ranges
+            formants = []
+            for f_min, f_max in formant_ranges:
+                mask = (xf >= f_min) & (xf <= f_max)
+                if np.any(mask):
+                    formant_peak = xf[mask][np.argmax(spectrum[mask])]
+                    formants.append(float(formant_peak))
+                else:
+                    formants.append(0.0)
 
-        # 5. Zero-Crossing Rate
-        zcr = float(librosa.feature.zero_crossing_rate(audio_chunk)[0].mean())
+            # 5. Energy (RMS)
+            energy = float(np.sqrt(np.mean(audio_chunk**2)))
 
-        # 6. Spectral Features
-        spectral = self._extract_spectral_features(audio_chunk)
+            # 6. Zero-crossing rate
+            zcr = float(np.sum(np.abs(np.diff(np.signbit(audio_chunk)))) / (2 * len(audio_chunk)))
 
-        # 7. Voice Onset Time (VOT) - simplified estimation
-        # Using the time between the burst (high energy) and the onset of voicing
-        onset_env = librosa.onset.onset_strength(y=audio_chunk, sr=self.sample_rate)
-        onsets = librosa.onset.onset_detect(onset_envelope=onset_env, sr=self.sample_rate)
-        vot = float(np.mean(np.diff(onsets))) if len(onsets) > 1 else None
+            # 7. Spectral features
+            spectral = self._compute_spectral_features(spectrum, xf)
 
-        return AcousticFeatures(
-            mfcc=mfcc_means,
-            pitch=pitch,
-            formants=formant_freqs,
-            energy=energy,
-            zcr=zcr,
-            spectral=spectral,
-            vot=vot
-        )
+            # 8. Voice Onset Time (simplified)
+            envelope = np.abs(audio_chunk)
+            onset_threshold = np.mean(envelope) + 0.5 * np.std(envelope)
+            onsets = np.where(envelope > onset_threshold)[0]
+            vot = float(onsets[0] / self.sample_rate) if len(onsets) > 0 else None
 
-    def _extract_spectral_features(self, audio_chunk: np.ndarray) -> SpectralFeatures:
-        """Extract spectral features"""
-        
-        # Spectral Centroid
-        centroid = float(librosa.feature.spectral_centroid(y=audio_chunk, sr=self.sample_rate).mean())
-        
-        # Spectral Bandwidth
-        bandwidth = float(librosa.feature.spectral_bandwidth(y=audio_chunk, sr=self.sample_rate).mean())
-        
-        # Spectral Flux
-        spec = np.abs(librosa.stft(audio_chunk))
-        flux = float(np.mean(np.diff(spec, axis=1)))
-        
-        # Spectral Rolloff
-        rolloff = float(librosa.feature.spectral_rolloff(y=audio_chunk, sr=self.sample_rate).mean())
-        
-        return SpectralFeatures(
-            centroid=centroid,
-            bandwidth=bandwidth,
-            flux=flux,
-            rolloff=rolloff
-        )
+            return AcousticFeatures(
+                mfcc=mfcc_means,
+                pitch=pitch,
+                formants=formants,
+                energy=energy,
+                zcr=zcr,
+                spectral=spectral,
+                vot=vot
+            )
+        except Exception as e:
+            logger.error(f"Error in acoustic feature extraction: {str(e)}")
+            raise
+
+    def _compute_spectral_features(self, spectrum: np.ndarray, frequencies: np.ndarray) -> SpectralFeatures:
+        """Compute spectral features using optimized numpy operations"""
+        try:
+            # Normalize spectrum
+            spectrum_norm = spectrum / np.sum(spectrum)
+            
+            # Spectral centroid
+            centroid = float(np.sum(frequencies * spectrum_norm))
+            
+            # Spectral bandwidth
+            bandwidth = float(np.sqrt(np.sum(((frequencies - centroid) ** 2) * spectrum_norm)))
+            
+            # Spectral flux (simplified)
+            flux = float(np.sum(np.diff(spectrum_norm) ** 2))
+            
+            # Spectral rolloff
+            cumsum = np.cumsum(spectrum_norm)
+            rolloff_point = np.where(cumsum >= 0.85)[0]
+            rolloff = float(frequencies[rolloff_point[0]]) if len(rolloff_point) > 0 else 0.0
+            
+            return SpectralFeatures(
+                centroid=centroid,
+                bandwidth=bandwidth,
+                flux=flux,
+                rolloff=rolloff
+            )
+        except Exception as e:
+            logger.error(f"Error in spectral feature computation: {str(e)}")
+            raise
+
+    def _extract_paralinguistic_features(self, audio_chunk: np.ndarray) -> ParalinguisticFeatures:
+        """Extract paralinguistic features using optimized computations"""
+        try:
+            # 1. Pitch Variability
+            yf = rfft(audio_chunk)
+            xf = rfftfreq(len(audio_chunk), 1 / self.sample_rate)
+            spectrum = np.abs(yf)
+            peaks, _ = find_peaks(spectrum, height=np.max(spectrum) * 0.1)
+            pitch_values = xf[peaks]
+            pitch_variability = float(np.std(pitch_values)) if len(pitch_values) > 0 else 0.0
+
+            # 2. Speech Rate using energy-based syllable detection
+            envelope = np.abs(audio_chunk)
+            envelope_smooth = np.convolve(envelope, np.ones(512)/512, mode='same')
+            peaks, _ = find_peaks(envelope_smooth, height=np.mean(envelope_smooth) * 1.5)
+            duration = len(audio_chunk) / self.sample_rate
+            speech_rate = float(len(peaks) / duration) if duration > 0 else 0.0
+
+            # 3. Jitter calculation using zero-crossings
+            zero_crossings = np.where(np.diff(np.signbit(audio_chunk)))[0]
+            if len(zero_crossings) > 1:
+                periods = np.diff(zero_crossings)
+                jitter = float(np.std(periods) / np.mean(periods))
+            else:
+                jitter = 0.0
+
+            # 4. Shimmer calculation using local maxima
+            peaks, _ = find_peaks(envelope, distance=int(0.01 * self.sample_rate))
+            if len(peaks) > 1:
+                peak_amplitudes = envelope[peaks]
+                shimmer = float(np.std(peak_amplitudes) / np.mean(peak_amplitudes))
+            else:
+                shimmer = 0.0
+
+            # 5. Harmonics-to-Noise Ratio
+            harmonic_peaks, _ = find_peaks(spectrum, height=np.mean(spectrum))
+            if len(harmonic_peaks) > 0:
+                harmonic_energy = np.sum(spectrum[harmonic_peaks])
+                total_energy = np.sum(spectrum)
+                noise_energy = total_energy - harmonic_energy
+                hnr = float(10 * np.log10(harmonic_energy / noise_energy)) if noise_energy > 0 else 40.0
+            else:
+                hnr = 0.0
+
+            return ParalinguisticFeatures(
+                pitch_variability=pitch_variability,
+                speech_rate=speech_rate,
+                jitter=jitter,
+                shimmer=shimmer,
+                hnr=hnr
+            )
+        except Exception as e:
+            logger.error(f"Error in paralinguistic feature extraction: {str(e)}")
+            raise
 
     def _extract_pitch(self, audio_chunk: np.ndarray) -> float:
         """Extract fundamental frequency (pitch)"""
@@ -126,4 +210,150 @@ class FeatureExtractor:
         duration = len(audio_chunk) / self.sample_rate
         speaking_rate = len(onsets) / duration if duration > 0 else 0.0
         
-        return float(speaking_rate) 
+        return float(speaking_rate)
+
+    def _calculate_pitch_variability(self, audio_chunk: np.ndarray) -> float:
+        """Calculate pitch variability using PYIN algorithm for better F0 estimation"""
+        try:
+            # Use PYIN for more accurate pitch tracking
+            f0, voiced_flag, _ = librosa.pyin(
+                audio_chunk,
+                fmin=librosa.note_to_hz('C2'),  # ~65 Hz
+                fmax=librosa.note_to_hz('C7'),  # ~2093 Hz
+                sr=self.sample_rate,
+                frame_length=2048
+            )
+            
+            # Filter out unvoiced segments and zeros
+            f0_voiced = f0[voiced_flag & (f0 > 0)]
+            
+            if len(f0_voiced) > 0:
+                # Calculate normalized standard deviation
+                pitch_mean = np.mean(f0_voiced)
+                pitch_std = np.std(f0_voiced)
+                pitch_variability = float(pitch_std / pitch_mean if pitch_mean > 0 else 0.0)
+                
+                # Scale to a more interpretable range (0-100 Hz typical range)
+                pitch_variability *= 100
+            else:
+                pitch_variability = 0.0
+                
+            return pitch_variability
+            
+        except Exception as e:
+            logger.error(f"Error calculating pitch variability: {str(e)}")
+            return 0.0
+
+    def _calculate_speech_rate(self, audio_chunk: np.ndarray) -> float:
+        """Calculate speech rate using enhanced syllable detection"""
+        try:
+            # 1. Get onset envelope with custom parameters
+            hop_length = 512
+            oenv = librosa.onset.onset_strength(
+                y=audio_chunk,
+                sr=self.sample_rate,
+                hop_length=hop_length,
+                aggregate=np.median  # More robust to noise
+            )
+            
+            # 2. Detect onsets using peak picking
+            onsets = librosa.onset.onset_detect(
+                onset_envelope=oenv,
+                sr=self.sample_rate,
+                hop_length=hop_length,
+                backtrack=True,
+                normalize=True
+            )
+            
+            # 3. Calculate speech rate
+            duration = len(audio_chunk) / self.sample_rate
+            if duration > 0:
+                # Convert frame indices to time
+                onset_times = librosa.frames_to_time(onsets, sr=self.sample_rate, hop_length=hop_length)
+                # Estimate syllables (with correction factor for potential false positives)
+                estimated_syllables = len(onset_times) * 0.85
+                speech_rate = float(estimated_syllables / duration)
+            else:
+                speech_rate = 0.0
+                
+            return speech_rate
+            
+        except Exception as e:
+            logger.error(f"Error calculating speech rate: {str(e)}")
+            return 0.0
+
+    def _calculate_voice_quality(self, audio_chunk: np.ndarray) -> tuple[float, float]:
+        """Calculate jitter and shimmer using cycle-to-cycle analysis"""
+        try:
+            # 1. Get fundamental frequency using PYIN
+            f0, voiced_flag, _ = librosa.pyin(
+                audio_chunk,
+                fmin=librosa.note_to_hz('C2'),
+                fmax=librosa.note_to_hz('C7'),
+                sr=self.sample_rate
+            )
+            
+            # Get amplitude envelope
+            hop_length = 256
+            rms = librosa.feature.rms(y=audio_chunk, hop_length=hop_length)[0]
+            
+            # Calculate jitter
+            f0_voiced = f0[voiced_flag]
+            if len(f0_voiced) > 1:
+                # Relative average perturbation (RAP)
+                f0_diff = np.abs(np.diff(f0_voiced))
+                jitter = float(np.mean(f0_diff) / np.mean(f0_voiced))
+            else:
+                jitter = 0.0
+            
+            # Calculate shimmer
+            if len(rms) > 1:
+                # Amplitude perturbation quotient (APQ)
+                amp_diff = np.abs(np.diff(rms))
+                shimmer = float(np.mean(amp_diff) / np.mean(rms))
+            else:
+                shimmer = 0.0
+            
+            # Scale to percentage values
+            jitter *= 100
+            shimmer *= 100
+            
+            return jitter, shimmer
+            
+        except Exception as e:
+            logger.error(f"Error calculating voice quality: {str(e)}")
+            return 0.0, 0.0
+
+    def _calculate_hnr(self, audio_chunk: np.ndarray) -> float:
+        """Calculate Harmonics-to-Noise Ratio using enhanced method"""
+        try:
+            # 1. Compute STFT
+            D = librosa.stft(audio_chunk)
+            S = np.abs(D)
+            
+            # 2. Harmonic-percussive source separation
+            H, P = librosa.decompose.hpss(
+                S,
+                kernel_size=31,  # Larger kernel for better separation
+                power=2.0,  # Soft mask
+                margin=3.0  # Wider margin for clear separation
+            )
+            
+            # 3. Calculate HNR
+            harmonic_energy = np.sum(H**2)
+            noise_energy = np.sum(P**2)
+            
+            if noise_energy > 0:
+                # Convert to dB scale
+                hnr = float(10 * np.log10(harmonic_energy / noise_energy))
+                
+                # Clip to reasonable range (-20 to 40 dB typical)
+                hnr = np.clip(hnr, -20.0, 40.0)
+            else:
+                hnr = 40.0  # Maximum value when no noise detected
+            
+            return hnr
+            
+        except Exception as e:
+            logger.error(f"Error calculating HNR: {str(e)}")
+            return 0.0 

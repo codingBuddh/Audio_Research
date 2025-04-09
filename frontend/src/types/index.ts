@@ -26,6 +26,14 @@ export interface AcousticFeatures {
   vot: number;
 }
 
+export interface ParalinguisticFeatures {
+  pitch_variability: number;
+  speech_rate: number;
+  jitter: number;
+  shimmer: number;
+  hnr: number;
+}
+
 export interface AudioChunk {
   chunk_id: number;
   start_time: number;
@@ -33,6 +41,7 @@ export interface AudioChunk {
   status: ChunkStatus;
   features?: {
     acoustic?: AcousticFeatures;
+    paralinguistic?: ParalinguisticFeatures;
   };
   error?: string;
 }

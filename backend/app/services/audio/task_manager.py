@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Set
 import librosa
 import numpy as np
 from fastapi import WebSocket
-from ...schemas.audio import AudioAnalysisResponse, ChunkStatus
+from ...schemas.audio import AudioAnalysisResponse, ChunkStatus, AudioFeatures
 from .feature_extractor import FeatureExtractor
 import logging
 
@@ -72,9 +72,12 @@ class AudioTaskManager:
                 # Extract features
                 features = self.feature_extractor.extract_features(chunk, feature_types)
                 
+                # Convert features to proper model
+                audio_features = AudioFeatures(**features)
+                
                 # Update chunk status
                 task.chunks[i].status = ChunkStatus.COMPLETED
-                task.chunks[i].features = features
+                task.chunks[i].features = audio_features
                 
             except Exception as e:
                 logger.error(f"Error processing chunk {i}: {str(e)}")

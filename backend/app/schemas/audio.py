@@ -28,8 +28,16 @@ class AcousticFeatures(BaseModel):
     spectral: SpectralFeatures = Field(description="Spectral features")
     vot: Optional[float] = Field(None, description="Voice onset time")
 
+class ParalinguisticFeatures(BaseModel):
+    pitch_variability: float = Field(description="Variability in fundamental frequency")
+    speech_rate: float = Field(description="Speech rate in syllables per second")
+    jitter: float = Field(description="Cycle-to-cycle variations in fundamental frequency")
+    shimmer: float = Field(description="Cycle-to-cycle variations in amplitude")
+    hnr: float = Field(description="Harmonics-to-Noise Ratio")
+
 class AudioFeatures(BaseModel):
     acoustic: Optional[AcousticFeatures] = None
+    paralinguistic: Optional[ParalinguisticFeatures] = None
 
 class AudioChunk(BaseModel):
     chunk_id: int = Field(description="Unique identifier for the chunk")

@@ -3,6 +3,15 @@ import { AudioFeatureType, AudioAnalysisResponse } from '../types'
 
 const API_BASE_URL = 'http://localhost:8000/api/v1'
 
+// Create axios instance with default config
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000, // 30 second timeout
+  headers: {
+    'Accept': 'application/json',
+  }
+});
+
 export const analyzeAudio = async (
   file: File,
   featureTypes: AudioFeatureType[]
@@ -17,12 +26,16 @@ export const analyzeAudio = async (
   formData.append('chunk_duration', '60.0')
 
   try {
-    const response = await axios.post<AudioAnalysisResponse>(
-      `${API_BASE_URL}/analyze`,
+    const response = await api.post<AudioAnalysisResponse>(
+      '/analyze',
       formData,
       {
         headers: {
           'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total!);
+          console.log('Upload progress:', percentCompleted, '%');
         },
       }
     )
@@ -30,7 +43,16 @@ export const analyzeAudio = async (
     return response.data
   } catch (error: any) {
     console.error('API error:', error.response?.data || error.message)
-    throw error
+    if (error.code === 'ECONNABORTED') {
+      throw new Error('Request timed out. Please try again.');
+    }
+    if (error.response?.status === 413) {
+      throw new Error('File is too large. Please try a smaller file.');
+    }
+    if (error.response?.data?.detail) {
+      throw new Error(error.response.data.detail);
+    }
+    throw new Error('Failed to analyze audio. Please try again.');
   }
 }
 
@@ -45,12 +67,19 @@ export const connectToWebSocket = (taskId: string): WebSocket => {
     console.error('WebSocket error:', error)
   }
   
+  ws.onclose = (event) => {
+    console.log('WebSocket closed:', event.code, event.reason)
+  }
+  
   return ws
 }
 
 export const getTaskStatus = async (taskId: string): Promise<AudioAnalysisResponse> => {
-  const response = await axios.get<AudioAnalysisResponse>(
-    `${API_BASE_URL}/status/${taskId}`
-  )
-  return response.data
+  try {
+    const response = await api.get<AudioAnalysisResponse>(`/status/${taskId}`)
+    return response.data
+  } catch (error: any) {
+    console.error('Error getting task status:', error.response?.data || error.message)
+    throw new Error('Failed to get analysis status. Please try again.');
+  }
 } 

@@ -5,9 +5,11 @@ import os
 import json
 from tempfile import NamedTemporaryFile
 import shutil
+import logging
 
 router = APIRouter()
 task_manager = AudioTaskManager()
+logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -23,25 +25,54 @@ async def analyze_audio(
     The analysis will be performed in chunks of 1 minute each, and results will be streamed via WebSocket.
     """
     try:
+        logger.info(f"Received analysis request for file: {file.filename}")
+        logger.info(f"Feature types: {feature_types}")
+        
         # Parse feature types from JSON string
-        feature_types_list = [AudioFeatureType(ft) for ft in json.loads(feature_types)]
+        try:
+            feature_types_list = [AudioFeatureType(ft) for ft in json.loads(feature_types)]
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON for feature_types: {feature_types}")
+            raise HTTPException(status_code=422, detail=f"Invalid feature types format: {str(e)}")
+        except ValueError as e:
+            logger.error(f"Invalid feature type value: {str(e)}")
+            raise HTTPException(status_code=422, detail=f"Invalid feature type: {str(e)}")
         
-        # Save the uploaded file
-        file_path = os.path.join(UPLOAD_DIR, file.filename)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # Validate file
+        if not file.filename:
+            raise HTTPException(status_code=422, detail="No file provided")
         
-        # Create analysis task
-        task_id = await task_manager.create_task(
-            file_path=file_path,
-            feature_types=feature_types_list,
-            chunk_duration=chunk_duration
-        )
+        # Create a unique filename to prevent conflicts
+        file_extension = os.path.splitext(file.filename)[1]
+        temp_file = NamedTemporaryFile(delete=False, suffix=file_extension, dir=UPLOAD_DIR)
         
-        return task_manager.get_task_status(task_id)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=f"Invalid feature type: {str(e)}")
+        try:
+            # Save the uploaded file
+            with temp_file as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            
+            logger.info(f"File saved successfully at: {temp_file.name}")
+            
+            # Create analysis task
+            task_id = await task_manager.create_task(
+                file_path=temp_file.name,
+                feature_types=feature_types_list,
+                chunk_duration=chunk_duration
+            )
+            
+            logger.info(f"Analysis task created with ID: {task_id}")
+            return task_manager.get_task_status(task_id)
+            
+        except Exception as e:
+            # Clean up the temp file if task creation fails
+            try:
+                os.unlink(temp_file.name)
+            except:
+                pass
+            raise e
+            
     except Exception as e:
+        logger.error(f"Error processing request: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/status/{task_id}", response_model=AudioAnalysisResponse)

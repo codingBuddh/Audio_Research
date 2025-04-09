@@ -8,6 +8,8 @@ import {
   Progress,
   Grid,
   GridItem,
+  useColorModeValue,
+  Container,
 } from '@chakra-ui/react'
 import { FileUploader } from './FileUploader'
 import { FeatureSelector } from './FeatureSelector'
@@ -77,54 +79,132 @@ export const AudioAnalyzer = () => {
 
   return (
     <VStack spacing={8} align="stretch">
-      <Box textAlign="center">
-        <Heading size="2xl" mb={2} color="brand.600">
-          Audio Analysis Dashboard
-        </Heading>
-        <Text fontSize="lg" color="gray.600">
-          Upload an audio file to analyze its features in real-time
-        </Text>
+      <Box 
+        as="header" 
+        w="100%" 
+        borderBottom="1px" 
+        borderColor={useColorModeValue('gray.200', 'gray.700')}
+        bg={useColorModeValue('white', 'black')}
+        position="fixed"
+        top={0}
+        zIndex={10}
+        px={8}
+        py={6}
+        shadow="sm"
+      >
+        <Container maxW="container.xl">
+          <Heading 
+            size="xl" 
+            color={useColorModeValue('black', 'white')}
+            fontWeight="bold"
+            letterSpacing="tight"
+          >
+            Psychometric Audio Analysis
+          </Heading>
+          <Text 
+            fontSize="md" 
+            color={useColorModeValue('gray.600', 'gray.400')}
+            mt={2}
+          >
+            Upload an audio file to analyze its features in real-time
+          </Text>
+        </Container>
       </Box>
 
-      <Grid templateColumns="repeat(12, 1fr)" gap={6}>
-        <GridItem colSpan={[12, 12, 8]}>
-          <Box bg="white" p={6} borderRadius="lg" shadow="base">
-            <FileUploader onFileSelect={handleFileSelect} />
-            {file && (
-              <AudioVisualizer
-                file={file}
-                results={results}
-                progress={progress}
-              />
-            )}
-          </Box>
-        </GridItem>
+      {/* Add spacing to account for fixed header */}
+      <Box h="160px" />
 
-        <GridItem colSpan={[12, 12, 4]}>
-          <VStack spacing={6}>
-            <Box bg="white" p={6} borderRadius="lg" shadow="base" w="full">
-              <FeatureSelector
-                selectedFeatures={selectedFeatures}
-                onFeaturesChange={setSelectedFeatures}
-                onAnalyze={handleAnalyze}
-                isAnalyzing={progress > 0 && progress < 100}
-              />
-            </Box>
+      <Container maxW="container.xl">
+        <Grid templateColumns="repeat(12, 1fr)" gap={8}>
+          {/* Left Column - Main Analysis Flow */}
+          <GridItem colSpan={7}>
+            <VStack spacing={8}>
+              <Box 
+                bg={useColorModeValue('white', 'black')} 
+                p={8} 
+                borderRadius="xl" 
+                shadow="lg" 
+                border="1px solid"
+                borderColor={useColorModeValue('gray.100', 'gray.800')}
+                w="100%"
+              >
+                <VStack spacing={4} align="stretch" w="100%">
+                  <FileUploader onFileSelect={handleFileSelect} />
+                  
+                  {file && (
+                    <>
+                      <Box 
+                        p={4} 
+                        bg={useColorModeValue('gray.50', 'gray.900')}
+                        borderRadius="md"
+                        border="1px dashed"
+                        borderColor={useColorModeValue('gray.200', 'gray.700')}
+                      >
+                        <Text fontWeight="medium" color={useColorModeValue('gray.700', 'gray.300')}>
+                          Selected File: {file.name}
+                        </Text>
+                      </Box>
+                      
+                      <Box>
+                        <AudioVisualizer
+                          file={file}
+                          results={results}
+                          progress={progress}
+                        />
+                      </Box>
+                    </>
+                  )}
+                </VStack>
+              </Box>
 
+              <Box 
+                bg={useColorModeValue('white', 'black')} 
+                p={8} 
+                borderRadius="xl" 
+                shadow="lg"
+                border="1px solid"
+                borderColor={useColorModeValue('gray.100', 'gray.800')}
+                w="100%"
+              >
+                <FeatureSelector
+                  selectedFeatures={selectedFeatures}
+                  onFeaturesChange={setSelectedFeatures}
+                  onAnalyze={handleAnalyze}
+                  isAnalyzing={progress > 0 && progress < 100}
+                />
+              </Box>
+            </VStack>
+          </GridItem>
+
+          {/* Right Column - Results */}
+          <GridItem colSpan={5} position="relative">
             {results && (
-              <Box bg="white" p={6} borderRadius="lg" shadow="base" w="full">
+              <Box 
+                bg={useColorModeValue('white', 'black')} 
+                p={8} 
+                borderRadius="xl" 
+                shadow="lg"
+                border="1px solid"
+                borderColor={useColorModeValue('gray.100', 'gray.800')}
+                position="sticky"
+                top="180px"
+              >
                 <Progress
                   value={progress}
-                  size="sm"
-                  colorScheme="brand"
-                  mb={4}
+                  size="md"
+                  colorScheme="green"
+                  mb={6}
+                  borderRadius="full"
+                  hasStripe={progress < 100}
+                  isAnimated={progress < 100}
+                  bg={useColorModeValue('gray.100', 'gray.700')}
                 />
                 <AnalysisResults results={results} />
               </Box>
             )}
-          </VStack>
-        </GridItem>
-      </Grid>
+          </GridItem>
+        </Grid>
+      </Container>
     </VStack>
   )
 } 
