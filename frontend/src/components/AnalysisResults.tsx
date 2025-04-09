@@ -4,6 +4,7 @@ import {
   Text,
   Box,
   Badge,
+  SimpleGrid,
 } from '@chakra-ui/react'
 import { Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/accordion'
 import { AudioAnalysisResponse, ChunkStatus } from '../types'
@@ -54,45 +55,71 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
             </h2>
             
             <AccordionPanel pb={4}>
-              {chunk.status === ChunkStatus.COMPLETED && chunk.features ? (
-                <Box>
-                  {chunk.features.mfcc && (
-                    <Box mb={3}>
-                      <Text fontWeight="bold">MFCCs:</Text>
-                      <Text fontSize="sm" color="gray.600">
-                        {chunk.features.mfcc.map((v: number) => v.toFixed(2)).join(', ')}
-                      </Text>
-                    </Box>
-                  )}
+              {chunk.status === ChunkStatus.COMPLETED && chunk.features?.acoustic ? (
+                <SimpleGrid columns={[1, 2]} spacing={4}>
+                  {/* MFCCs */}
+                  <Box mb={3}>
+                    <Text fontWeight="bold">MFCCs:</Text>
+                    <Text fontSize="sm" color="gray.600">
+                      {chunk.features.acoustic.mfcc.map((v: number) => v.toFixed(2)).join(', ')}
+                    </Text>
+                  </Box>
                   
-                  {chunk.features.pitch && (
-                    <Box mb={3}>
-                      <Text fontWeight="bold">Pitch:</Text>
-                      <Text fontSize="sm" color="gray.600">
-                        {chunk.features.pitch.toFixed(2)} Hz
-                      </Text>
-                    </Box>
-                  )}
+                  {/* Pitch */}
+                  <Box mb={3}>
+                    <Text fontWeight="bold">Pitch:</Text>
+                    <Text fontSize="sm" color="gray.600">
+                      {chunk.features.acoustic.pitch.toFixed(2)} Hz
+                    </Text>
+                  </Box>
                   
-                  {chunk.features.emotion_scores && (
-                    <Box mb={3}>
-                      <Text fontWeight="bold">Emotion Scores:</Text>
-                      <Text fontSize="sm" color="gray.600">
-                        Arousal: {chunk.features.emotion_scores.arousal.toFixed(2)},
-                        Valence: {chunk.features.emotion_scores.valence.toFixed(2)}
-                      </Text>
-                    </Box>
-                  )}
+                  {/* Formants */}
+                  <Box mb={3}>
+                    <Text fontWeight="bold">Formants:</Text>
+                    <Text fontSize="sm" color="gray.600">
+                      {chunk.features.acoustic.formants.map((f: number, i: number) => 
+                        `F${i+1}: ${f.toFixed(2)} Hz`
+                      ).join(', ')}
+                    </Text>
+                  </Box>
                   
-                  {chunk.features.speaking_rate && (
+                  {/* Energy */}
+                  <Box mb={3}>
+                    <Text fontWeight="bold">Energy:</Text>
+                    <Text fontSize="sm" color="gray.600">
+                      {chunk.features.acoustic.energy.toFixed(4)}
+                    </Text>
+                  </Box>
+                  
+                  {/* Zero-Crossing Rate */}
+                  <Box mb={3}>
+                    <Text fontWeight="bold">Zero-Crossing Rate:</Text>
+                    <Text fontSize="sm" color="gray.600">
+                      {chunk.features.acoustic.zcr.toFixed(4)}
+                    </Text>
+                  </Box>
+                  
+                  {/* Spectral Features */}
+                  <Box mb={3}>
+                    <Text fontWeight="bold">Spectral Features:</Text>
+                    <Text fontSize="sm" color="gray.600">
+                      Centroid: {chunk.features.acoustic.spectral.centroid.toFixed(2)} Hz<br />
+                      Bandwidth: {chunk.features.acoustic.spectral.bandwidth.toFixed(2)} Hz<br />
+                      Flux: {chunk.features.acoustic.spectral.flux.toFixed(4)}<br />
+                      Roll-off: {chunk.features.acoustic.spectral.rolloff.toFixed(2)} Hz
+                    </Text>
+                  </Box>
+                  
+                  {/* Voice Onset Time */}
+                  {chunk.features.acoustic.vot !== null && (
                     <Box mb={3}>
-                      <Text fontWeight="bold">Speaking Rate:</Text>
+                      <Text fontWeight="bold">Voice Onset Time:</Text>
                       <Text fontSize="sm" color="gray.600">
-                        {chunk.features.speaking_rate.toFixed(2)} syllables/second
+                        {chunk.features.acoustic.vot.toFixed(4)} seconds
                       </Text>
                     </Box>
                   )}
-                </Box>
+                </SimpleGrid>
               ) : chunk.status === ChunkStatus.FAILED ? (
                 <Text color="red.500">{chunk.error}</Text>
               ) : (

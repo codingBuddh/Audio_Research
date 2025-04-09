@@ -1,7 +1,8 @@
 import librosa
 import numpy as np
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import logging
+from ...schemas.audio import AudioFeatureType, AcousticFeatures, SpectralFeatures
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +16,8 @@ class FeatureExtractor:
         
         try:
             for feature_type in feature_types:
-                if feature_type == "mfcc":
-                    features["mfcc"] = self._extract_mfcc(audio_chunk)
+                if feature_type == AudioFeatureType.ACOUSTIC:
+                    features["acoustic"] = self._extract_acoustic_features(audio_chunk)
                 elif feature_type == "pitch":
                     features["pitch"] = self._extract_pitch(audio_chunk)
                 elif feature_type == "emotion_scores":
@@ -29,10 +30,69 @@ class FeatureExtractor:
             
         return features
 
-    def _extract_mfcc(self, audio_chunk: np.ndarray, n_mfcc: int = 13) -> List[float]:
-        """Extract Mel-frequency cepstral coefficients"""
-        mfccs = librosa.feature.mfcc(y=audio_chunk, sr=self.sample_rate, n_mfcc=n_mfcc)
-        return mfccs.mean(axis=1).tolist()
+    def _extract_acoustic_features(self, audio_chunk: np.ndarray) -> AcousticFeatures:
+        """Extract all acoustic features (Low-Level Descriptors)"""
+        
+        # 1. MFCCs
+        mfccs = librosa.feature.mfcc(y=audio_chunk, sr=self.sample_rate, n_mfcc=13)
+        mfcc_means = mfccs.mean(axis=1).tolist()
+
+        # 2. Pitch (Fundamental Frequency)
+        pitches, magnitudes = librosa.piptrack(y=audio_chunk, sr=self.sample_rate)
+        pitch = float(pitches[magnitudes > 0.5].mean()) if len(pitches[magnitudes > 0.5]) > 0 else 0.0
+
+        # 3. Formants (using linear prediction coefficients as proxy)
+        lpc_coeffs = librosa.lpc(audio_chunk, order=8)
+        formants = np.abs(np.roots(lpc_coeffs))
+        formant_freqs = sorted([float(f * self.sample_rate / (2 * np.pi)) for f in formants if f < 1])[:3]
+        
+        # 4. Energy
+        energy = float(np.sqrt(np.mean(audio_chunk**2)))
+
+        # 5. Zero-Crossing Rate
+        zcr = float(librosa.feature.zero_crossing_rate(audio_chunk)[0].mean())
+
+        # 6. Spectral Features
+        spectral = self._extract_spectral_features(audio_chunk)
+
+        # 7. Voice Onset Time (VOT) - simplified estimation
+        # Using the time between the burst (high energy) and the onset of voicing
+        onset_env = librosa.onset.onset_strength(y=audio_chunk, sr=self.sample_rate)
+        onsets = librosa.onset.onset_detect(onset_envelope=onset_env, sr=self.sample_rate)
+        vot = float(np.mean(np.diff(onsets))) if len(onsets) > 1 else None
+
+        return AcousticFeatures(
+            mfcc=mfcc_means,
+            pitch=pitch,
+            formants=formant_freqs,
+            energy=energy,
+            zcr=zcr,
+            spectral=spectral,
+            vot=vot
+        )
+
+    def _extract_spectral_features(self, audio_chunk: np.ndarray) -> SpectralFeatures:
+        """Extract spectral features"""
+        
+        # Spectral Centroid
+        centroid = float(librosa.feature.spectral_centroid(y=audio_chunk, sr=self.sample_rate).mean())
+        
+        # Spectral Bandwidth
+        bandwidth = float(librosa.feature.spectral_bandwidth(y=audio_chunk, sr=self.sample_rate).mean())
+        
+        # Spectral Flux
+        spec = np.abs(librosa.stft(audio_chunk))
+        flux = float(np.mean(np.diff(spec, axis=1)))
+        
+        # Spectral Rolloff
+        rolloff = float(librosa.feature.spectral_rolloff(y=audio_chunk, sr=self.sample_rate).mean())
+        
+        return SpectralFeatures(
+            centroid=centroid,
+            bandwidth=bandwidth,
+            flux=flux,
+            rolloff=rolloff
+        )
 
     def _extract_pitch(self, audio_chunk: np.ndarray) -> float:
         """Extract fundamental frequency (pitch)"""

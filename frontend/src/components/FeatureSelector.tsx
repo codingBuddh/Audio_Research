@@ -1,63 +1,70 @@
+import React from 'react';
 import {
   VStack,
-  Heading,
-  Button,
   Checkbox,
   CheckboxGroup,
-} from '@chakra-ui/react'
-import { AudioFeatureType } from '../types'
-
-interface FeatureSelectorProps {
-  selectedFeatures: AudioFeatureType[]
-  onChange: (features: AudioFeatureType[]) => void
-  onAnalyze: () => void
-  isAnalyzing: boolean
-}
+  Button,
+  Text,
+  Box,
+  Heading,
+} from '@chakra-ui/react';
+import { AudioFeatureType } from '../types';
 
 const FEATURE_OPTIONS = [
-  { value: AudioFeatureType.MFCC, label: 'Mel-frequency Cepstral Coefficients (MFCC)' },
-  { value: AudioFeatureType.PITCH, label: 'Pitch Analysis' },
-  { value: AudioFeatureType.EMOTION_SCORES, label: 'Emotion Analysis' },
-  { value: AudioFeatureType.SPEAKING_RATE, label: 'Speaking Rate' },
-]
+  {
+    type: AudioFeatureType.ACOUSTIC,
+    label: "Acoustic Features",
+  }
+];
 
-export const FeatureSelector = ({
+interface FeatureSelectorProps {
+  selectedFeatures: AudioFeatureType[];
+  onFeaturesChange: (features: AudioFeatureType[]) => void;
+  isAnalyzing: boolean;
+  onAnalyze: () => void;
+}
+
+export const FeatureSelector: React.FC<FeatureSelectorProps> = ({
   selectedFeatures,
-  onChange,
-  onAnalyze,
+  onFeaturesChange,
   isAnalyzing,
-}: FeatureSelectorProps) => {
+  onAnalyze,
+}) => {
   return (
-    <VStack align="stretch" spacing={4}>
-      <Heading size="md" mb={2}>
-        Select Features
-      </Heading>
-      
-      <CheckboxGroup
-        value={selectedFeatures}
-        onChange={(values) => onChange(values as AudioFeatureType[])}
-      >
-        <VStack align="start" spacing={3}>
-          {FEATURE_OPTIONS.map((option) => (
-            <Checkbox key={option.value} value={option.value}>
-              {option.label}
+    <VStack spacing={6} align="stretch" w="100%" p={4}>
+      <Box>
+        <Heading size="md" mb={4}>Select Analysis Features</Heading>
+        <VStack align="start" spacing={4}>
+          {FEATURE_OPTIONS.map((feature) => (
+            <Checkbox
+              key={feature.type}
+              value={feature.type}
+              isChecked={selectedFeatures.includes(feature.type)}
+              onChange={(e) => {
+                const newFeatures = e.target.checked
+                  ? [...selectedFeatures, feature.type]
+                  : selectedFeatures.filter(f => f !== feature.type);
+                onFeaturesChange(newFeatures);
+              }}
+              isDisabled={isAnalyzing}
+              w="100%"
+            >
+              <Text fontWeight="medium">{feature.label}</Text>
             </Checkbox>
           ))}
         </VStack>
-      </CheckboxGroup>
-
+      </Box>
+      
       <Button
-        colorScheme="brand"
-        size="lg"
-        onClick={onAnalyze}
+        colorScheme="blue"
+        isDisabled={selectedFeatures.length === 0 || isAnalyzing}
         isLoading={isAnalyzing}
         loadingText="Analyzing..."
-        isDisabled={selectedFeatures.length === 0 || isAnalyzing}
-        w="full"
-        mt={4}
+        onClick={onAnalyze}
+        size="lg"
       >
         Analyze Audio
       </Button>
     </VStack>
-  )
-} 
+  );
+}; 

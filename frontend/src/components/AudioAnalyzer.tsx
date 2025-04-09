@@ -105,7 +105,7 @@ export const AudioAnalyzer = () => {
             <Box bg="white" p={6} borderRadius="lg" shadow="base" w="full">
               <FeatureSelector
                 selectedFeatures={selectedFeatures}
-                onChange={setSelectedFeatures}
+                onFeaturesChange={setSelectedFeatures}
                 onAnalyze={handleAnalyze}
                 isAnalyzing={progress > 0 && progress < 100}
               />

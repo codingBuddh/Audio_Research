@@ -1,8 +1,8 @@
 export enum AudioFeatureType {
-  MFCC = "mfcc",
-  PITCH = "pitch",
-  EMOTION_SCORES = "emotion_scores",
-  SPEAKING_RATE = "speaking_rate",
+  ACOUSTIC = "acoustic",
+  SPEAKER = "speaker",
+  PARALINGUISTIC = "paralinguistic",
+  COGNITIVE = "cognitive"
 }
 
 export enum ChunkStatus {
@@ -11,17 +11,34 @@ export enum ChunkStatus {
   FAILED = "FAILED",
 }
 
+export interface AcousticFeatures {
+  mfcc: number[];
+  pitch: number;
+  formants: number[];
+  energy: number;
+  zcr: number;
+  spectral: {
+    centroid: number;
+    bandwidth: number;
+    flux: number;
+    rolloff: number;
+  };
+  vot: number;
+}
+
 export interface AudioChunk {
-  chunk_id: number
-  start_time: number
-  end_time: number
-  status: ChunkStatus
-  features?: any
-  error?: string
+  chunk_id: number;
+  start_time: number;
+  end_time: number;
+  status: ChunkStatus;
+  features?: {
+    acoustic?: AcousticFeatures;
+  };
+  error?: string;
 }
 
 export interface AudioAnalysisResponse {
-  task_id: string
-  total_chunks: number
-  chunks: AudioChunk[]
+  task_id: string;
+  total_chunks: number;
+  chunks: AudioChunk[];
 } 
